@@ -1,43 +1,7 @@
-// const jwt = require("jsonwebtoken")
-// const User = require("../models/UserModels")
-
-// exports.authenticateUser = async (req, res, next) => {
-//     try {
-//         const authHeader = req.headers.authorization 
-//         if (!authHeader) {
-//             return res.status(403).json(
-//                 { "success": false, "message": "Token required" }
-//             )
-//         }
-//         const token = authHeader.split(" ")[1]; 
-//         const decoded = jwt.verify(token, process.env.JWT_SECRET) 
-//         const userId = decoded._id 
-//         const user = await User.findOne({ _id: userId })
-//         if (!user) {
-//             return res.status(401).json(
-//                 { "success": false, "message": "User not found" }
-//             )
-//         }
-//         req.user = user 
-//         next() 
-//     } catch (err) {
-//         return res.status(500).json(
-//             { "success": false, "message": "Authentication error" }
-//         )
-//     }
-// }
-
-// exports.isAdmin = (req, res, next) => {
-//     if (req.user && req.user.role === 'admin') {
-//         next()
-//     } else {
-//         return res.status(403).json(
-//             { "success": false, "message": "Access denied, not admin" }
-//         )
-//     }
-// }
 const jwt = require("jsonwebtoken");
 const User = require("../models/UserModels");
+const Collection = require("../models/CollectionModel"); // example for collection
+const Product = require("../models/ProductModel"); // example for product
 
 // Middleware: Authenticate any user (creator, consumer, admin)
 exports.authenticateUser = async (req, res, next) => {
@@ -107,4 +71,44 @@ exports.isConsumer = (req, res, next) => {
     success: false,
     message: "Access denied: Consumer only",
   });
+};
+
+// Middleware: Allow only admin or creator of the resource (Collection example)
+exports.isAdminOrCreatorOfCollection = async (req, res, next) => {
+  try {
+    const collectionId = req.params.id;
+    const collection = await Collection.findById(collectionId);
+    if (!collection) {
+      return res.status(404).json({ success: false, message: "Collection not found" });
+    }
+
+    if (req.user.role === "admin" || collection.creator.toString() === req.user._id.toString()) {
+      return next();
+    }
+
+    return res.status(403).json({ success: false, message: "Access denied" });
+  } catch (err) {
+    console.error("Authorization error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Middleware: Allow only admin or creator of the product (Product example)
+exports.isAdminOrCreatorOfProduct = async (req, res, next) => {
+  try {
+    const productId = req.params.id;
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    if (req.user.role === "admin" || product.creator.toString() === req.user._id.toString()) {
+      return next();
+    }
+
+    return res.status(403).json({ success: false, message: "Access denied" });
+  } catch (err) {
+    console.error("Authorization error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 };
