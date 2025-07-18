@@ -1,7 +1,7 @@
 const express = require("express")
 const router = express.Router()
 
-const { registerUser, loginUser, resetPassword,sendResetLink } = require("../controllers/userController") 
+const { registerUser, loginUser, resetPassword,sendResetLink, getAllCreators } = require("../controllers/userController") 
 
 router.post(
     "/register",
@@ -19,4 +19,7 @@ router.post(
     "/reset-password/:token", 
     resetPassword
 )
+
+router.get("/GetAllCreators", getAllCreators);
+
 module.exports = router;

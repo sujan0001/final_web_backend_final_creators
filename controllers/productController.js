@@ -174,6 +174,7 @@ exports.createProduct = async (req, res) => {
       originalPrice,
       collection,
       creator: req.user._id,
+      onSale: true,
     });
 
     await newProduct.save();
@@ -185,11 +186,27 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// ===== 2. Get Products of Current Creator =====
+// // ===== 2. Get Products of Current Creator =====
+// exports.getMyProducts = async (req, res) => {
+//   try {
+//     const products = await Product.find({
+//       creator: req.user._id,
+//       isDeleted: { $ne: true },
+//     }).populate("collection", "title coverImage");
+
+//     return res.status(200).json({ success: true, data: products });
+//   } catch (err) {
+//     return res.status(500).json({ success: false, message: "Server error" });
+//   }
+// };
+// ===== 2. Get Products of Current Creator in a Specific Collection =====
 exports.getMyProducts = async (req, res) => {
   try {
+    const { collectionId } = req.params;
+
     const products = await Product.find({
       creator: req.user._id,
+      collection: collectionId,
       isDeleted: { $ne: true },
     }).populate("collection", "title coverImage");
 
@@ -361,3 +378,54 @@ exports.getMyOwnedProducts = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// ===== 10. Get Product by ID =====
+exports.getProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate("creator collection owner");
+
+    if (!product || product.isDeleted) {
+      return res.status(404).json({ success: false, message: "Product not found" });
+    }
+
+    return res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Get All Products That Are On Sale and NOT Sold
+// "owners list is null" → product is available / not sold
+exports.getAvailableProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      onSale: true,
+      owner: null,
+      isDeleted: { $ne: true }
+    }).populate("creator");
+
+    return res.status(200).json({ success: true, data: products });
+  } catch (err) {
+    console.error("Error fetching available products:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Get All Products That Are On Sale and ALREADY Sold
+// "owners list has some data" → product has been bought
+exports.getSoldProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      onSale: true,
+      owner: { $ne: null },
+      isDeleted: { $ne: true }
+    }).populate("creator owner");
+
+    return res.status(200).json({ success: true, data: products });
+  } catch (err) {
+    console.error("Error fetching sold products:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+

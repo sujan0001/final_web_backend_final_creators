@@ -388,3 +388,20 @@ exports.softDeleteUser = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+// ===== GET CREATORS (Oldest to Newest, Not Deleted) =====
+exports.getAllCreators = async (req, res) => {
+  try {
+    const creators = await User.find({
+      role: "creator",
+      isDeleted: { $ne: true },
+    })
+      .sort({ createdAt: 1 }) // oldest first
+      .select("firstName lastName email profile createdAt");
+
+    return res.status(200).json({ success: true, data: creators });
+  } catch (err) {
+    console.error("Get All Creators Error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};

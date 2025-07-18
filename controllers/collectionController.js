@@ -101,6 +101,8 @@
 // };
 const Collection = require("../models/CollectionModel");
 const Product = require("../models/ProductModel");
+const mongoose = require("mongoose");
+
 
 // ========== 1. Create Collection (Creator only) ==========
 exports.createCollection = async (req, res) => {
@@ -224,6 +226,42 @@ exports.deleteCollection = async (req, res) => {
     return res.status(200).json({ success: true, message: "Collection deleted successfully" });
   } catch (err) {
     console.error("Delete Collection Error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+//this is what's being used for fetching all the products of a particular collection 
+// exports.getCollectionById = async (req, res) => {
+//   try {
+//     const collection = await Collection.findById(req.params.id);
+
+//     if (!collection) {
+//       return res.status(404).json({ success: false, message: "Collection not found" });
+//     }
+
+//     return res.status(200).json({ success: true, data: collection });
+//   } catch (err) {
+//     console.error("Error fetching collection:", err);
+//     return res.status(500).json({ success: false, message: "Server error" });
+//   }
+// };
+exports.getCollectionById = async (req, res) => {
+  const { id } = req.params;
+
+  // Check if valid ObjectId
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: "Invalid collection ID" });
+  }
+
+  try {
+    const collection = await Collection.findById(id).populate("creator", "firstName lastName email");
+
+    if (!collection || collection.isDeleted) {
+      return res.status(404).json({ success: false, message: "Collection not found" });
+    }
+
+    return res.status(200).json({ success: true, data: collection });
+  } catch (err) {
+    console.error("Error fetching collection:", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
