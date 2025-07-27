@@ -429,3 +429,93 @@ exports.getSoldProducts = async (req, res) => {
   }
 };
 
+// ===== 11. Request Product Transfer (Buyer Initiates) =====
+exports.requestProductTransfer = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product || !product.onSale || product.isDeleted) {
+      return res.status(400).json({ success: false, message: "Product not available for sale" });
+    }
+
+    if (product.pendingTransfer.isPending) {
+      return res.status(400).json({ success: false, message: "Transfer already pending" });
+    }
+
+    // Save the transfer request
+    product.pendingTransfer = {
+      isPending: true,
+      buyer: req.user._id,
+    };
+
+    await product.save();
+
+    return res.status(200).json({ success: true, message: "Transfer request sent to owner/creator" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ===== 12. Confirm or Decline Transfer =====
+exports.respondToTransferRequest = async (req, res) => {
+  try {
+    const { action } = req.body; // "accept" or "decline"
+    const product = await Product.findById(req.params.id);
+
+    if (!product || product.isDeleted || !product.pendingTransfer.isPending) {
+      return res.status(400).json({ success: false, message: "No pending transfer to act upon" });
+    }
+
+    const currentUserId = req.user._id.toString();
+    const isCreator = product.creator.toString() === currentUserId;
+    const isOwner = product.owner ? product.owner.toString() === currentUserId : false;
+
+    if (!(isCreator || isOwner)) {
+      return res.status(403).json({ success: false, message: "Not authorized to confirm this transfer" });
+    }
+
+    if (action === "accept") {
+      // Transfer ownership
+      const pricePaid = product.resalePrice || product.originalPrice;
+
+      product.soldHistory.push({
+        owner: product.owner || product.creator,
+        price: pricePaid,
+      });
+
+      product.owner = product.pendingTransfer.buyer;
+      product.onSale = false;
+      product.resalePrice = undefined;
+      product.pendingTransfer = { isPending: false, buyer: null };
+
+      await product.save();
+
+      return res.status(200).json({ success: true, message: "Transfer approved", data: product });
+    } else {
+      // Decline transfer
+      product.pendingTransfer = { isPending: false, buyer: null };
+      await product.save();
+
+      return res.status(200).json({ success: true, message: "Transfer declined" });
+    }
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+// ===== 13. Get Transfer Requests Assigned to Me =====
+exports.getIncomingTransferRequests = async (req, res) => {
+  try {
+    const products = await Product.find({
+      "pendingTransfer.isPending": true,
+      isDeleted: { $ne: true },
+      $or: [
+        { creator: req.user._id },
+        { owner: req.user._id },
+      ]
+    }).populate("pendingTransfer.buyer collection");
+
+    return res.status(200).json({ success: true, data: products });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
