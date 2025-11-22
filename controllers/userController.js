@@ -387,7 +387,7 @@ exports.softDeleteUser = async (req, res) => {
     console.error("Soft delete user error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
-};
+};  
 
 // ===== GET CREATORS (Oldest to Newest, Not Deleted) =====
 exports.getAllCreators = async (req, res) => {
@@ -403,5 +403,115 @@ exports.getAllCreators = async (req, res) => {
   } catch (err) {
     console.error("Get All Creators Error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ===== GET ALL USERS (ADMIN ONLY) =====
+exports.getAllUsers = async (req, res) => {
+  try {
+    const { 
+      role, 
+      status, 
+      page = 1, 
+      limit = 10, 
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+    
+    // Filter by role if specified
+    if (role && role !== 'all') {
+      filter.role = role;
+    }
+    
+    // Filter by status (active/deleted)
+    if (status === 'active') {
+      filter.isDeleted = { $ne: true };
+    } else if (status === 'deleted') {
+      filter.isDeleted = true;
+    }
+    // If status is 'all' or not specified, don't add isDeleted filter
+    
+    // Search functionality
+    if (search) {
+      filter.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Execute query with pagination
+    const users = await User.find(filter)
+      .select('firstName lastName email role isDeleted createdAt updatedAt')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const totalUsers = await User.countDocuments(filter);
+    const totalPages = Math.ceil(totalUsers / parseInt(limit));
+
+    // Get user statistics
+    const stats = await User.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalUsers: { $sum: 1 },
+          activeUsers: { 
+            $sum: { $cond: [{ $ne: ['$isDeleted', true] }, 1, 0] } 
+          },
+          deletedUsers: { 
+            $sum: { $cond: [{ $eq: ['$isDeleted', true] }, 1, 0] } 
+          },
+          creators: { 
+            $sum: { $cond: [{ $eq: ['$role', 'creator'] }, 1, 0] } 
+          },
+          consumers: { 
+            $sum: { $cond: [{ $eq: ['$role', 'consumer'] }, 1, 0] } 
+          },
+          admins: { 
+            $sum: { $cond: [{ $eq: ['$role', 'admin'] }, 1, 0] } 
+          }
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: users,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalUsers,
+        hasNextPage: parseInt(page) < totalPages,
+        hasPrevPage: parseInt(page) > 1
+      },
+      stats: stats[0] || {
+        totalUsers: 0,
+        activeUsers: 0,
+        deletedUsers: 0,
+        creators: 0,
+        consumers: 0,
+        admins: 0
+      }
+    });
+    
+  } catch (err) {
+    console.error("Get All Users Error:", err);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Server error" 
+    });
   }
 };
